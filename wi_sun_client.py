@@ -52,8 +52,11 @@ class SimpleEchonetLiteClient():
             }
 
     def __init__(self):
-        # TODO: add desc for the value '115200'.
-        self.serial_dev = serial.Serial(self.SERIAL_DEV, 115200)
+        # Define read timeout for serial dev to avoid to be freezed.
+        ser_read_timeout = 10.0  # sec
+
+        self.serial_dev = serial.Serial(
+            self.SERIAL_DEV, baudrate=115200, timeout=ser_read_timeout)
         self.conf_force_update = False
         self.conf = self._get_config(self.CONFIG_FILE, self.conf_force_update)
 
@@ -257,8 +260,6 @@ def main():
 
         while True:
             for key in ['0xE0', '0xE7', '0xE8']:
-                # https://echonet.jp/wp/wp-content/uploads/pdf/General/Standard/Release/Release_H_jp/Appendix_H.pdf
-                # 瞬時電流計測値 OxE8 p.312
                 print('epc: {}, val: {}'.format(key, elcli.get_data(key)))
                 sleep(timeout_each_data)
 
