@@ -17,7 +17,8 @@ logging.basicConfig(
 account = yaml.safe_load(open('./secret/b_route.yml'))
 
 
-class MyPowerMeter():
+# TODO: revise name for more specific for my wi-sun device
+class SimpleEchonetLiteClient():
     """ECHONET Lite Client"""
 
     MAX_DURATION_SCAN = 7  # Should be < 15, but not work for 8 or large one.
@@ -27,12 +28,11 @@ class MyPowerMeter():
     SERIAL_DEV = '/dev/ttyUSB0'
     CONFIG_FILE = './config/wi_sun_config.yml'
 
-    EPC = 'E8'
-    epcs = {
-        'E0': b'\xE0',  # 積算電力量(正)
-        'E3': b'\xE3',  # 積算電力量(逆)
-        'E7': b'\xE7',  # 瞬時電力
-        'E8': b'\xE8',   # 瞬時電流
+    EPCS = {
+        'E0': b'\xE0',  # 積算電力量(正) [kWh]
+        'E3': b'\xE3',  # 積算電力量(逆) [kWh]
+        'E7': b'\xE7',  # 瞬時電力 [W]
+        'E8': b'\xE8',   # 瞬時電流 [A]
         }
 
     def echonet_lite_frame(self, epc):
@@ -45,7 +45,7 @@ class MyPowerMeter():
             'DEOJ': b'\x02\x88\x01',
             'ESV': b'\x62',
             'OPC': b'\x01',
-            'EPC': self.epcs[epc],
+            'EPC': self.EPCS[epc],
             'PDC': b'\x00',
             }
 
@@ -65,7 +65,7 @@ class MyPowerMeter():
         """Get config from existing file."""
 
         if os.path.exists(conf_fpath):
-            if time.time() - os.path.getmtime(conf_fpath) > self.CONF_LIFETIME:
+            if time.time() - os.path.getmtime(conf_fpath) < self.CONF_LIFETIME:
                 return yaml.safe_load(open(conf_fpath))
             return None
         return None
@@ -75,49 +75,49 @@ class MyPowerMeter():
 
         pwd = "SKSETPWD C " + account['passwd'] + "\r\n"
         self.serial_dev.write(pwd.encode('utf-8'))
-        logging.info('(Echo back) %s' % (
-            self.serial_dev.readline().decode('utf-8').rstrip()))
-        logging.info('Passwd: %s' % (
+        logging.info('Send passwd for auth B route: "%s"' % pwd.rstrip())
+        logging.info('(Echo back) %s' % self.serial_dev.readline())
+        logging.info('(Result) %s' % (
             self.serial_dev.readline().decode('utf-8').rstrip()))
 
         # Bルート認証ID設定
         bid = "SKSETRBID " + account['b_id'] + "\r\n"
         self.serial_dev.write(bid.encode('utf-8'))
-        logging.info('(Echo back) %s' % (
-            self.serial_dev.readline().decode('utf-8').rstrip()))
-        logging.info('BID: %s' % (
+        logging.info('Sent ID for auth B route: "%s"' % bid.rstrip())
+        logging.info('(Echo back) %s' % self.serial_dev.readline())
+        logging.info('(Result) %s' % (
             self.serial_dev.readline().decode('utf-8').rstrip()))
 
     def _auth_pana(self, s_duration):
-        """Auth for PANA connection next."""
+        """Auth for PANA connection after B route."""
 
-        scan_duration = s_duration
+        scan_duration = s_duration  # it's incremented up to max val
         scan_res = {}
 
         while "Channel" not in scan_res.keys():
-            # アクティブスキャン（IE あり）を行う
-            # 時間かかります。10秒ぐらい？
             msg = "SKSCAN 2 FFFFFFFF " + str(scan_duration) + "\r\n"
             self.serial_dev.write(msg.encode())
+            logging.info('Sent ID for auth PANA: "%s"' % msg.rstrip())
 
-            # スキャン1回について、スキャン終了までのループ
-            scan_end = False
-            while not scan_end:
+            flg_scan_end = False
+            while not flg_scan_end:
                 line = self.serial_dev.readline().decode('utf-8')
-                logging.info(line.rstrip())
+                logging.debug('Msg in auth PANA: %s' % line.rstrip())
 
-                if line.startswith("EVENT 22"):
-                    # スキャン終わったよ（見つかったかどうかは関係なく）
-                    scan_end = True
-                elif line.startswith("  "):
-                    # スキャンして見つかったらスペース2個あけてデータがやってくる
-                    # 例
-                    #  Channel:39
-                    #  Channel Page:09
-                    #  Pan ID:FFFF
-                    #  Addr:FFFFFFFFFFFFFFFF
-                    #  LQI:A7
-                    #  PairID:FFFFFFFF
+                if line.startswith("EVENT 22"):  # Finished to scan.
+                    flg_scan_end = True
+                elif line.startswith("  "):  # Found values for access.
+                    # In this case, "EVENT 20", returned values are given
+                    # with two spaces ahead. Here is an example.
+                    #
+                    #   EVENT 20 FE80:0000:0000:0000:021D:1290:0003:8474
+                    #   EPANDESC
+                    #     Channel:39
+                    #     Channel Page:09
+                    #     Pan ID:FFFF
+                    #     Addr:FFFFFFFFFFFFFFFF
+                    #     LQI:A7
+                    #     PairID:FFFFFFFF
                     cols = line.strip().split(':')
                     scan_res[cols[0]] = cols[1]
             scan_duration += 1
@@ -140,92 +140,90 @@ class MyPowerMeter():
         """Check device version"""
 
         self.serial_dev.write(b'SKVER\r\n')
-        logging.info('(Echo back) %s' % (
-            self.serial_dev.readline().decode('utf-8').rstrip()))
+        logging.info('(Echo back) %s' % self.serial_dev.readline())
         return self.serial_dev.readline().decode('utf-8').rstrip()
 
     def connect(self):
         '''Negotiation to connect the device.'''
 
-        self.serial_dev.write(
-            str.encode("SKSREG S2 " + self.conf['Channel'] + "\r\n"))
+        msg = "SKSREG S2 " + self.conf['Channel']
+        self.serial_dev.write(str.encode(msg + "\r\n"))
+        logging.info('Conn with given channel: %s' % msg)
         logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info(
-            self.serial_dev.readline().decode(encoding='utf-8').rstrip())
+        logging.info('(Result) %s' % (
+            self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
 
-        # PanID設定
-        self.serial_dev.write(
-            str.encode("SKSREG S3 " + self.conf['Pan ID'] + "\r\n"))
-        logging.info('PanID設定')
+        msg = "SKSREG S3 " + self.conf['Pan ID']
+        self.serial_dev.write(str.encode(msg + "\r\n"))
+        logging.info('Set PanID: %s' % msg)
         logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info(
-            self.serial_dev.readline().decode(encoding='utf-8').rstrip())
+        logging.info('(Result) %s' % (
+            self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
 
-        # PANA 接続シーケンス
-        self.serial_dev.write(
-            str.encode("SKJOIN " + self.conf['Addr'] + "\r\n"))
-        logging.info('PANA接続シーケンス')
+        msg = "SKJOIN " + self.conf['Addr']
+        self.serial_dev.write(str.encode(msg + "\r\n"))
+        logging.info('Set IPv6 addr: %s' % msg)
         logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info(
-            self.serial_dev.readline().decode(encoding='utf-8').rstrip())
+        logging.info('(Result) %s' % (
+            self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
 
-        # PANA 接続完了待ち
+        # Waiting for connection.
         b_connected = False
         while not b_connected:
             line = self.serial_dev.readline().decode(
                 encoding='utf-8', errors='ignore')
 
             if line.startswith("EVENT 24"):
-                print("Error: Failed to connection PANA")
+                print('Error: Failed PANA connection')
                 sys.exit()
             elif line.startswith("EVENT 25"):
-                logging.info('Succeeded to connection PANA')
+                logging.info('Succeeded PANA connection')
                 b_connected = True
         self.serial_dev.readline()
 
-    def get_data(self):
+    def get_data(self, epc=None):
         """Get data from the device."""
 
         el_frame = b''
-        for eframe in self.echonet_lite_frame(self.EPC).values():
+        for eframe in self.echonet_lite_frame(epc).values():
             el_frame += eframe
 
         while True:
-            # コマンド送信
+            # Send command.
             command = "SKSENDTO 1 {0} 0E1A 1 {1:04X} ".format(
                 self.conf['Addr'], len(el_frame))
-            logging.info('Command to get data: %s' % command.rstrip())
+            logging.info('Sent cmd to get data: %s' % command.rstrip())
             self.serial_dev.write(str.encode(command) + el_frame)
 
-            # コマンド受信
-            eb = self.serial_dev.readline()  # エコーバック
-            logging.info('(Echo back) %s' % eb)
-            event = self.serial_dev.readline()  # EVENT 21
-            cmd_res = self.serial_dev.readline()  # 成功ならOKを返す
-            logging.info('EVENT: %s, CMD_RES: %s' % (event, cmd_res))
+            # Recv command.
+            logging.info('(Echo back) %s' % self.serial_dev.readline())
+            event = self.serial_dev.readline()  # Must be "EVENT 21"
+            logging.info(
+                '(Result) %s' % event.decode(encoding='utf-8').rstrip())
+            cmd_res = self.serial_dev.readline()
+            logging.info(
+                '(Result) %s' % cmd_res.decode(encoding='utf-8').rstrip())
 
-            # 返信データ取得
-            # data = self.serial_dev.readline().decode(
-            #         encoding='utf-8', errors='ignore')
             data = self.serial_dev.readline().decode(encoding='utf-8').rstrip()
-            logging.info('Res data: %s' % data)
-            # data = str(data).replace("b'", '').replace("\\r\\n'", '').split()
-            # print(data[0])
+            logging.info('Res: %s' % data)
 
-            # データチェック
+            # Check the data.
             if data.startswith('ERXUDP'):
                 cols = data.strip().split(' ')
                 res = cols[8]
                 params = {}
                 params['seoj'] = res[8:8+6]
                 params['esv'] = res[20:20+2]
-                # スマートメーター(028801)なら
+
+                # 'seoj' must be '028801' if using smart meter
                 if params['seoj'] == "028801" and params['esv'] == "72":
-                    if res[24:24+2] == self.EPC:
+                    if res[24:24+2] == epc:
                         hex_power = data[-8:]
                         int_power = int(hex_power, 16)
+
+                        # TODO: make it to return value, not printing
                         print("EPC: {0}, VALUE: {1}".format(
-                            self.EPC, int_power))
+                            epc, int_power))
 
             sleep(self.DATA_INTERVAL)
 
@@ -239,14 +237,14 @@ def main():
     """Program main"""
 
     try:
-        my_pow = MyPowerMeter()
-        # print(my_pow.device_version())
-        my_pow.connect()
-        my_pow.get_data()
+        elcli = SimpleEchonetLiteClient()
+        # print(elcli.device_version())
+        elcli.connect()
+        elcli.get_data('E7')
 
     finally:
         print("Closing serial port device ...")
-        my_pow.close_serial_dev()
+        elcli.close_serial_dev()
 
 
 if __name__ == '__main__':
