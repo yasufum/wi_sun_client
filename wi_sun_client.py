@@ -30,10 +30,11 @@ class SimpleEchonetLiteClient():
     CONFIG_FILE = './config/wi_sun_config.yml'
 
     EPCS = {
-        'E0': b'\xE0',  # 積算電力量(正) [kWh]
-        'E3': b'\xE3',  # 積算電力量(逆) [kWh]
-        'E7': b'\xE7',  # 瞬時電力 [W]
-        'E8': b'\xE8',   # 瞬時電流 [A]
+        '0xE0': b'\xE0',  # 積算電力量(正)
+        '0xE1': b'\xE0',  # 積算電力量の単位
+        '0xE3': b'\xE3',  # 積算電力量(逆)
+        '0xE7': b'\xE7',  # 瞬時電力 [W]
+        '0xE8': b'\xE8',   # 瞬時電流
         }
 
     def echonet_lite_frame(self, epc):
@@ -187,6 +188,11 @@ class SimpleEchonetLiteClient():
     def get_data(self, epc=None):
         """Get data from the device."""
 
+        return int(self.get_raw_data(epc), 16)
+
+    def get_raw_data(self, epc=None):
+        """Get raw hex data from the device."""
+
         el_frame = b''
         for eframe in self.echonet_lite_frame(epc).values():
             el_frame += eframe
@@ -220,9 +226,9 @@ class SimpleEchonetLiteClient():
 
                 # 'seoj' must be '028801' if using smart meter
                 if params['seoj'] == "028801" and params['esv'] == "72":
-                    if res[24:24+2] == epc:
+                    if res[24:24+2] == epc[-2:]:
                         hex_power = data[-8:]
-                        return int(hex_power, 16)
+                        return hex_power
 
             sleep(self.DATA_INTERVAL)
 
@@ -242,7 +248,9 @@ def main():
         elcli.connect()
 
         while True:
-            for key in elcli.EPCS.keys():
+            for key in ['0xE7']:
+                # https://echonet.jp/wp/wp-content/uploads/pdf/General/Standard/Release/Release_H_jp/Appendix_H.pdf
+                # 瞬時電流計測値 OxE8 p.312
                 print('epc: {}, val: {}'.format(key, elcli.get_data(key)))
                 sleep(1)
 
