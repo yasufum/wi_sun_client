@@ -188,7 +188,13 @@ class SimpleEchonetLiteClient():
     def get_data(self, epc=None):
         """Get data from the device."""
 
-        return int(self.get_raw_data(epc), 16)
+        if epc == '0xE8':
+            raw_data = self.get_raw_data(epc)
+            r_phase_val = raw_data[0:4]
+            t_phase_val = raw_data[4:8]
+            return (int(r_phase_val, 16) / 10.0, int(t_phase_val, 16) / 10.0)
+        else:
+            return int(self.get_raw_data(epc), 16)
 
     def get_raw_data(self, epc=None):
         """Get raw hex data from the device."""
@@ -241,6 +247,8 @@ class SimpleEchonetLiteClient():
 def main():
     """Program main"""
 
+    timeout_each_data = 1
+
     try:
         elcli = SimpleEchonetLiteClient()
 
@@ -248,11 +256,11 @@ def main():
         elcli.connect()
 
         while True:
-            for key in ['0xE7']:
+            for key in ['0xE0', '0xE7', '0xE8']:
                 # https://echonet.jp/wp/wp-content/uploads/pdf/General/Standard/Release/Release_H_jp/Appendix_H.pdf
                 # 瞬時電流計測値 OxE8 p.312
                 print('epc: {}, val: {}'.format(key, elcli.get_data(key)))
-                sleep(1)
+                sleep(timeout_each_data)
 
     finally:
         print("Closing serial port device ...")
