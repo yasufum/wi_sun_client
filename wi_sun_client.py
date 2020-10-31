@@ -222,11 +222,7 @@ class SimpleEchonetLiteClient():
                 if params['seoj'] == "028801" and params['esv'] == "72":
                     if res[24:24+2] == epc:
                         hex_power = data[-8:]
-                        int_power = int(hex_power, 16)
-
-                        # TODO: make it to return value, not printing
-                        print("EPC: {0}, VALUE: {1}".format(
-                            epc, int_power))
+                        return int(hex_power, 16)
 
             sleep(self.DATA_INTERVAL)
 
@@ -241,9 +237,14 @@ def main():
 
     try:
         elcli = SimpleEchonetLiteClient()
+
         # print(elcli.device_version())
         elcli.connect()
-        elcli.get_data('E7')
+
+        while True:
+            for key in elcli.EPCS.keys():
+                print('epc: {}, val: {}'.format(key, elcli.get_data(key)))
+                sleep(1)
 
     finally:
         print("Closing serial port device ...")
