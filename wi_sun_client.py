@@ -52,7 +52,8 @@ class SimpleEchonetLiteClient():
     def __init__(self):
         # TODO: add desc for the value '115200'.
         self.serial_dev = serial.Serial(self.SERIAL_DEV, 115200)
-        self.conf = self._get_config(self.CONFIG_FILE)
+        self.conf_force_update = False
+        self.conf = self._get_config(self.CONFIG_FILE, self.conf_force_update)
 
         if not self.conf:
             scan_duration = 4
@@ -61,11 +62,12 @@ class SimpleEchonetLiteClient():
             with open(self.CONFIG_FILE, 'w') as cfpath:
                 yaml.dump(self.conf, cfpath)
 
-    def _get_config(self, conf_fpath):
+    def _get_config(self, conf_fpath, force_update=False):
         """Get config from existing file."""
 
         if os.path.exists(conf_fpath):
-            if time.time() - os.path.getmtime(conf_fpath) < self.CONF_LIFETIME:
+            age_of_file = time.time() - os.path.getmtime(conf_fpath)
+            if age_of_file < self.CONF_LIFETIME and force_update is False:
                 return yaml.safe_load(open(conf_fpath))
             return None
         return None
