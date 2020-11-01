@@ -294,23 +294,25 @@ def main():
         while True:
             json_obj = []
             for key in targets.keys():
-                if key == '0xE0' or key == '0xE7':
-                    json_obj.append({
-                                'measurement': targets[key],
-                                'tags': {'host': influx_params['host']},
-                                'fields': {'value': int(elcli.get_data(key))}
-                            })
+                if key == '0xE0':  # Value is in kW, convert to W
+                    val = int(elcli.get_data(key)) * 1000
+                elif key == '0xE7':  # in W
+                    val = int(elcli.get_data(key))
                 elif key == '0xE8':
-                    json_obj.append({
-                                'measurement': targets[key],
-                                'tags': {'host': influx_params['host']},
-                                'fields': {'value': float(
-                                    elcli.get_data(key)[0])}
-                            })
+                    # Value is a combination of Amperes, but not interested
+                    # in the second one in case of my device.
+                    val = float(elcli.get_data(key)[0])
+
+                json_obj.append({
+                            'measurement': targets[key],
+                            'tags': {'host': influx_params['host']},
+                            'fields': {'value': val}
+                        })
 
                 sleep(timeout_each_data)
 
             influx_cli.write_points(json_obj)
+            logging.info('Sent to influxdb: %s' % json_obj)
             sleep(retrieve_interval)
 
     finally:
