@@ -22,9 +22,9 @@ account = yaml.safe_load(open('./secret/b_route.yml'))
 class SimpleEchonetLiteClient():
     """ECHONET Lite Client"""
 
-    MAX_DURATION_SCAN = 7  # Should be < 15, but not work for 8 or large one.
-    DATA_INTERVAL = 10  # sec
+    RETRY_INTERVAL = 10  # sec
     CONF_LIFETIME = 24 * 60 * 60
+    MAX_DURATION_SCAN = 7  # Should be < 15, but not work for 8 or large one.
 
     SERIAL_DEV = '/dev/ttyUSB0'
     CONFIG_FILE = './config/wi_sun_config.yml'
@@ -239,7 +239,7 @@ class SimpleEchonetLiteClient():
                         hex_power = data[-8:]
                         return hex_power
 
-            sleep(self.DATA_INTERVAL)
+            sleep(self.RETRY_INTERVAL)
 
     def close_serial_dev(self):
         """Make the program close connection surely."""
@@ -250,7 +250,8 @@ class SimpleEchonetLiteClient():
 def main():
     """Program main"""
 
-    timeout_each_data = 1
+    interval = 10  # sec
+    timeout_each_data = 1  # sec
 
     try:
         elcli = SimpleEchonetLiteClient()
@@ -262,6 +263,7 @@ def main():
             for key in ['0xE0', '0xE7', '0xE8']:
                 print('epc: {}, val: {}'.format(key, elcli.get_data(key)))
                 sleep(timeout_each_data)
+            sleep(interval)
 
     finally:
         print("Closing serial port device ...")
