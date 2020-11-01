@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 '''Sample program for ECHONET-Lite.'''
 
+import influxdb
 import logging
 import os
 import sys
@@ -80,6 +81,7 @@ class SimpleEchonetLiteClient():
     def _auth_b_route(self):
         """Auth with B route account first for accessing the device."""
 
+        # Send password
         pwd = "SKSETPWD C " + account['passwd'] + "\r\n"
         self.serial_dev.write(pwd.encode('utf-8'))
         logging.info('Send passwd for auth B route: "%s"' % pwd.rstrip())
@@ -87,7 +89,7 @@ class SimpleEchonetLiteClient():
         logging.info('(Result) %s' % (
             self.serial_dev.readline().decode('utf-8').rstrip()))
 
-        # Bルート認証ID設定
+        # Send B route ID
         bid = "SKSETRBID " + account['b_id'] + "\r\n"
         self.serial_dev.write(bid.encode('utf-8'))
         logging.info('Sent ID for auth B route: "%s"' % bid.rstrip())
@@ -98,7 +100,9 @@ class SimpleEchonetLiteClient():
     def _auth_pana(self, s_duration):
         """Auth for PANA connection after B route."""
 
-        scan_duration = s_duration  # it's incremented up to max val
+        # incremented up to max val while negotiation
+        scan_duration = s_duration
+
         scan_res = {}
 
         while "Channel" not in scan_res.keys():
@@ -134,7 +138,7 @@ class SimpleEchonetLiteClient():
                 print("Failed to authenticate PANA")
                 sys.exit()
 
-        # MACアドレスをIPV6リンクローカルアドレスに変換
+        # Convert MAC address into IPv6 local link address.
         self.serial_dev.write(
             str.encode("SKLL64 " + scan_res["Addr"] + "\r\n"))
         self.serial_dev.readline().decode(encoding='utf-8')
@@ -247,23 +251,67 @@ class SimpleEchonetLiteClient():
         self.serial_dev.close()
 
 
+class MyInflaxClient():
+    """A simple influxdb client."""
+
+    def __init__(self, host, dbname):
+        # Check the dbname is existing first.
+        self.client = influxdb.InfluxDBClient(host=host)
+        if not {'name': dbname} in self.client.get_list_database():
+            self.client.create_database(dbname)
+
+        self.client = influxdb.InfluxDBClient(host=host, database=dbname)
+
+    def write_points(self, data):
+        self.client.write_points(data)
+
+
 def main():
     """Program main"""
 
-    interval = 10  # sec
+    retrieve_interval = 30  # sec
     timeout_each_data = 1  # sec
 
     try:
+        influx_params = yaml.safe_load(open('./secret/influx.yml'))
         elcli = SimpleEchonetLiteClient()
+        influx_cli = MyInflaxClient(influx_params['host'],
+                                    influx_params['dbname'])
 
         # print(elcli.device_version())
         elcli.connect()
 
+        # Target values for monitoring defined as a set of ID in Echonet and
+        # measurement in influxdb.
+        # NOTE: You can use any of measurement because influxdb registers data
+        #       with given measurement.
+        targets = {
+            '0xE0': 'integ_energy',  # 積算電力量
+            '0xE7': 'inst_energy',   # 瞬間電力量
+            '0xE8': 'inst_current',  # 瞬間電力量
+            }
+
         while True:
-            for key in ['0xE0', '0xE7', '0xE8']:
-                print('epc: {}, val: {}'.format(key, elcli.get_data(key)))
+            json_obj = []
+            for key in targets.keys():
+                if key == '0xE0' or key == '0xE7':
+                    json_obj.append({
+                                'measurement': targets[key],
+                                'tags': {'host': influx_params['host']},
+                                'fields': {'value': int(elcli.get_data(key))}
+                            })
+                elif key == '0xE8':
+                    json_obj.append({
+                                'measurement': targets[key],
+                                'tags': {'host': influx_params['host']},
+                                'fields': {'value': float(
+                                    elcli.get_data(key)[0])}
+                            })
+
                 sleep(timeout_each_data)
-            sleep(interval)
+
+            influx_cli.write_points(json_obj)
+            sleep(retrieve_interval)
 
     finally:
         print("Closing serial port device ...")
