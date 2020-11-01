@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 '''Sample program for ECHONET-Lite.'''
 
+import datetime
 import influxdb
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 import time
@@ -11,8 +13,11 @@ from time import sleep
 import serial
 import yaml
 
+basename, _ = os.path.splitext(os.path.basename(__file__))
 logging.basicConfig(
-    filename='log/wi_sun_client.log', level=logging.INFO,
+    level=logging.INFO,
+    handlers=[RotatingFileHandler(('log/%s.log' % basename),
+                                  maxBytes=1000*1000, backupCount=5)],
     format='[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 # TODO: remove such a sensitive info.
@@ -85,16 +90,16 @@ class SimpleEchonetLiteClient():
         pwd = "SKSETPWD C " + account['passwd'] + "\r\n"
         self.serial_dev.write(pwd.encode('utf-8'))
         logging.info('Send passwd for auth B route: "%s"' % pwd.rstrip())
-        logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info('(Result) %s' % (
+        logging.debug('(Echo back) %s' % self.serial_dev.readline())
+        logging.debug('(Result) %s' % (
             self.serial_dev.readline().decode('utf-8').rstrip()))
 
         # Send B route ID
         bid = "SKSETRBID " + account['b_id'] + "\r\n"
         self.serial_dev.write(bid.encode('utf-8'))
         logging.info('Sent ID for auth B route: "%s"' % bid.rstrip())
-        logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info('(Result) %s' % (
+        logging.debug('(Echo back) %s' % self.serial_dev.readline())
+        logging.debug('(Result) %s' % (
             self.serial_dev.readline().decode('utf-8').rstrip()))
 
     def _auth_pana(self, s_duration):
@@ -151,7 +156,7 @@ class SimpleEchonetLiteClient():
         """Check device version"""
 
         self.serial_dev.write(b'SKVER\r\n')
-        logging.info('(Echo back) %s' % self.serial_dev.readline())
+        logging.debug('(Echo back) %s' % self.serial_dev.readline())
         return self.serial_dev.readline().decode('utf-8').rstrip()
 
     def connect(self):
@@ -160,22 +165,22 @@ class SimpleEchonetLiteClient():
         msg = "SKSREG S2 " + self.conf['Channel']
         self.serial_dev.write(str.encode(msg + "\r\n"))
         logging.info('Conn with given channel: %s' % msg)
-        logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info('(Result) %s' % (
+        logging.debug('(Echo back) %s' % self.serial_dev.readline())
+        logging.debug('(Result) %s' % (
             self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
 
         msg = "SKSREG S3 " + self.conf['Pan ID']
         self.serial_dev.write(str.encode(msg + "\r\n"))
         logging.info('Set PanID: %s' % msg)
-        logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info('(Result) %s' % (
+        logging.debug('(Echo back) %s' % self.serial_dev.readline())
+        logging.debug('(Result) %s' % (
             self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
 
         msg = "SKJOIN " + self.conf['Addr']
         self.serial_dev.write(str.encode(msg + "\r\n"))
         logging.info('Set IPv6 addr: %s' % msg)
-        logging.info('(Echo back) %s' % self.serial_dev.readline())
-        logging.info('(Result) %s' % (
+        logging.debug('(Echo back) %s' % self.serial_dev.readline())
+        logging.debug('(Result) %s' % (
             self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
 
         # Waiting for connection.
@@ -218,12 +223,12 @@ class SimpleEchonetLiteClient():
             self.serial_dev.write(str.encode(command) + el_frame)
 
             # Recv command.
-            logging.info('(Echo back) %s' % self.serial_dev.readline())
+            logging.debug('(Echo back) %s' % self.serial_dev.readline())
             event = self.serial_dev.readline()  # Must be "EVENT 21"
-            logging.info(
+            logging.debug(
                 '(Result) %s' % event.decode(encoding='utf-8').rstrip())
             cmd_res = self.serial_dev.readline()
-            logging.info(
+            logging.debug(
                 '(Result) %s' % cmd_res.decode(encoding='utf-8').rstrip())
 
             data = self.serial_dev.readline().decode(encoding='utf-8').rstrip()
@@ -269,7 +274,7 @@ class MyInflaxClient():
 def main():
     """Program main"""
 
-    retrieve_interval = 30  # sec
+    retrieve_interval = 10  # sec
     timeout_each_data = 1  # sec
 
     try:
@@ -303,9 +308,12 @@ def main():
                     # in the second one in case of my device.
                     val = float(elcli.get_data(key)[0])
 
+                # Add timestamp in JST
+                now = str(datetime.datetime.now()) + '+09:00'
                 json_obj.append({
                             'measurement': targets[key],
                             'tags': {'host': influx_params['host']},
+                            'time': now,
                             'fields': {'value': val}
                         })
 
