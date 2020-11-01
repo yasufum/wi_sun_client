@@ -21,6 +21,7 @@ logging.basicConfig(
     format='[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 # TODO: remove such a sensitive info.
+# TODO: Change to find path be run from anywhere.
 account = yaml.safe_load(open('./secret/b_route.yml'))
 
 
@@ -70,6 +71,7 @@ class SimpleEchonetLiteClient():
             scan_duration = 4
             self._auth_b_route()
             self.conf = self._auth_pana(scan_duration)
+            # TODO: Change to find path be run from anywhere.
             with open(self.CONFIG_FILE, 'w') as cfpath:
                 yaml.dump(self.conf, cfpath)
 
@@ -79,6 +81,7 @@ class SimpleEchonetLiteClient():
         if os.path.exists(conf_fpath):
             age_of_file = time.time() - os.path.getmtime(conf_fpath)
             if age_of_file < self.CONF_LIFETIME and force_update is False:
+                # TODO: Change to find path be run from anywhere.
                 return yaml.safe_load(open(conf_fpath))
             return None
         return None
@@ -278,6 +281,7 @@ def main():
     timeout_each_data = 1  # sec
 
     try:
+        # TODO: Change to find path be run from anywhere.
         influx_params = yaml.safe_load(open('./secret/influx.yml'))
         elcli = SimpleEchonetLiteClient()
         influx_cli = MyInflaxClient(influx_params['host'],
