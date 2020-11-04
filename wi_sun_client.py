@@ -3,9 +3,9 @@
 '''Sample program for ECHONET-Lite.'''
 
 import datetime
-import influxdb
 import logging
 from logging.handlers import RotatingFileHandler
+from my_influxdb_client import MyInfluxdbClient
 import os
 import sys
 import time
@@ -259,21 +259,6 @@ class SimpleEchonetLiteClient():
         self.serial_dev.close()
 
 
-class MyInflaxClient():
-    """A simple influxdb client."""
-
-    def __init__(self, host, dbname):
-        # Check the dbname is existing first.
-        self.client = influxdb.InfluxDBClient(host=host)
-        if not {'name': dbname} in self.client.get_list_database():
-            self.client.create_database(dbname)
-
-        self.client = influxdb.InfluxDBClient(host=host, database=dbname)
-
-    def write_points(self, data):
-        self.client.write_points(data)
-
-
 def main():
     """Program main"""
 
@@ -284,7 +269,7 @@ def main():
         # TODO: Change to find path be run from anywhere.
         influx_params = yaml.safe_load(open('./secret/influx.yml'))
         elcli = SimpleEchonetLiteClient()
-        influx_cli = MyInflaxClient(influx_params['host'],
+        influx_cli = MyInfluxdbClient(influx_params['host'],
                                     influx_params['dbname'])
 
         # print(elcli.device_version())
