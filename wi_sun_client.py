@@ -5,13 +5,14 @@
 import datetime
 import logging
 from logging.handlers import RotatingFileHandler
-from my_influxdb_client import MyInfluxdbClient
 import os
+import serial
 import sys
 import time
 from time import sleep
-import serial
 import yaml
+
+from my_influxdb_client import MyInfluxdbClient
 
 basename, _ = os.path.splitext(os.path.basename(__file__))
 logging.basicConfig(
@@ -92,18 +93,18 @@ class SimpleEchonetLiteClient():
         # Send password
         pwd = "SKSETPWD C " + account['passwd'] + "\r\n"
         self.serial_dev.write(pwd.encode('utf-8'))
-        logging.info('Send passwd for auth B route: "%s"' % pwd.rstrip())
-        logging.debug('(Echo back) %s' % self.serial_dev.readline())
-        logging.debug('(Result) %s' % (
-            self.serial_dev.readline().decode('utf-8').rstrip()))
+        logging.info('Send passwd for auth B route: "%s"', pwd.rstrip())
+        logging.debug('(Echo back) %s', self.serial_dev.readline())
+        logging.debug('(Result) %s',
+                      self.serial_dev.readline().decode('utf-8').rstrip())
 
         # Send B route ID
         bid = "SKSETRBID " + account['b_id'] + "\r\n"
         self.serial_dev.write(bid.encode('utf-8'))
-        logging.info('Sent ID for auth B route: "%s"' % bid.rstrip())
-        logging.debug('(Echo back) %s' % self.serial_dev.readline())
-        logging.debug('(Result) %s' % (
-            self.serial_dev.readline().decode('utf-8').rstrip()))
+        logging.info('Sent ID for auth B route: "%s"', bid.rstrip())
+        logging.debug('(Echo back) %s', self.serial_dev.readline())
+        logging.debug('(Result) %s',
+                      self.serial_dev.readline().decode('utf-8').rstrip())
 
     def _auth_pana(self, s_duration):
         """Auth for PANA connection after B route."""
@@ -116,12 +117,12 @@ class SimpleEchonetLiteClient():
         while "Channel" not in scan_res.keys():
             msg = "SKSCAN 2 FFFFFFFF " + str(scan_duration) + "\r\n"
             self.serial_dev.write(msg.encode())
-            logging.info('Sent ID for auth PANA: "%s"' % msg.rstrip())
+            logging.info('Sent ID for auth PANA: "%s"', msg.rstrip())
 
             flg_scan_end = False
             while not flg_scan_end:
                 line = self.serial_dev.readline().decode('utf-8')
-                logging.debug('Msg in auth PANA: %s' % line.rstrip())
+                logging.debug('Msg in auth PANA: %s', line.rstrip())
 
                 if line.startswith("EVENT 22"):  # Finished to scan.
                     flg_scan_end = True
@@ -159,7 +160,7 @@ class SimpleEchonetLiteClient():
         """Check device version"""
 
         self.serial_dev.write(b'SKVER\r\n')
-        logging.debug('(Echo back) %s' % self.serial_dev.readline())
+        logging.debug('(Echo back) %s', self.serial_dev.readline())
         return self.serial_dev.readline().decode('utf-8').rstrip()
 
     def connect(self):
@@ -167,24 +168,27 @@ class SimpleEchonetLiteClient():
 
         msg = "SKSREG S2 " + self.conf['Channel']
         self.serial_dev.write(str.encode(msg + "\r\n"))
-        logging.info('Conn with given channel: %s' % msg)
-        logging.debug('(Echo back) %s' % self.serial_dev.readline())
-        logging.debug('(Result) %s' % (
-            self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
+        logging.info('Conn with given channel: %s', msg)
+        logging.debug('(Echo back) %s', self.serial_dev.readline())
+        logging.debug(
+                '(Result) %s',
+                self.serial_dev.readline().decode(encoding='utf-8').rstrip())
 
         msg = "SKSREG S3 " + self.conf['Pan ID']
         self.serial_dev.write(str.encode(msg + "\r\n"))
-        logging.info('Set PanID: %s' % msg)
-        logging.debug('(Echo back) %s' % self.serial_dev.readline())
-        logging.debug('(Result) %s' % (
-            self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
+        logging.info('Set PanID: %s', msg)
+        logging.debug('(Echo back) %s', self.serial_dev.readline())
+        logging.debug(
+                '(Result) %s',
+                self.serial_dev.readline().decode(encoding='utf-8').rstrip())
 
         msg = "SKJOIN " + self.conf['Addr']
         self.serial_dev.write(str.encode(msg + "\r\n"))
-        logging.info('Set IPv6 addr: %s' % msg)
-        logging.debug('(Echo back) %s' % self.serial_dev.readline())
-        logging.debug('(Result) %s' % (
-            self.serial_dev.readline().decode(encoding='utf-8').rstrip()))
+        logging.info('Set IPv6 addr: %s', msg)
+        logging.debug('(Echo back) %s', self.serial_dev.readline())
+        logging.debug(
+                '(Result) %s',
+                self.serial_dev.readline().decode(encoding='utf-8').rstrip())
 
         # Waiting for connection.
         b_connected = False
@@ -222,20 +226,20 @@ class SimpleEchonetLiteClient():
             # Send command.
             command = "SKSENDTO 1 {0} 0E1A 1 {1:04X} ".format(
                 self.conf['Addr'], len(el_frame))
-            logging.info('Sent cmd to get data: %s' % command.rstrip())
+            logging.info('Sent cmd to get data: %s', command.rstrip())
             self.serial_dev.write(str.encode(command) + el_frame)
 
             # Recv command.
-            logging.debug('(Echo back) %s' % self.serial_dev.readline())
+            logging.debug('(Echo back) %s', self.serial_dev.readline())
             event = self.serial_dev.readline()  # Must be "EVENT 21"
             logging.debug(
-                '(Result) %s' % event.decode(encoding='utf-8').rstrip())
+                '(Result) %s', event.decode(encoding='utf-8').rstrip())
             cmd_res = self.serial_dev.readline()
             logging.debug(
-                '(Result) %s' % cmd_res.decode(encoding='utf-8').rstrip())
+                '(Result) %s', cmd_res.decode(encoding='utf-8').rstrip())
 
             data = self.serial_dev.readline().decode(encoding='utf-8').rstrip()
-            logging.info('Res: %s' % data)
+            logging.info('Res: %s', data)
 
             # Check the data.
             if data.startswith('ERXUDP'):
@@ -309,7 +313,7 @@ def main():
                 sleep(timeout_each_data)
 
             influx_cli.write_points(json_obj)
-            logging.info('Sent to influxdb: %s' % json_obj)
+            logging.info('Sent to influxdb: %s', json_obj)
             sleep(retrieve_interval)
 
     finally:
