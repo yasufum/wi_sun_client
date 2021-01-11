@@ -15,15 +15,16 @@ import yaml
 from my_influxdb_client import MyInfluxdbClient
 
 basename, _ = os.path.splitext(os.path.basename(__file__))
+work_dir = os.path.dirname(__file__)
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[RotatingFileHandler(('log/%s.log' % basename),
+    handlers=[RotatingFileHandler(('{}/log/{}.log'.format(work_dir, basename)),
                                   maxBytes=1000*1000, backupCount=5)],
     format='[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 # TODO: remove such a sensitive info.
 # TODO: Change to find path be run from anywhere.
-account = yaml.safe_load(open('./secret/b_route.yml'))
+account = yaml.safe_load(open('{}/secret/b_route.yml'.format(work_dir)))
 
 
 # TODO: revise name for more specific for my wi-sun device
@@ -31,11 +32,11 @@ class SimpleEchonetLiteClient():
     """ECHONET Lite Client"""
 
     RETRY_INTERVAL = 10  # sec
-    CONF_LIFETIME = 24 * 60 * 60
+    CONF_LIFETIME = 12 * 60 * 60
     MAX_DURATION_SCAN = 7  # Should be < 15, but not work for 8 or large one.
 
     SERIAL_DEV = '/dev/ttyUSB0'
-    CONFIG_FILE = './config/wi_sun_config.yml'
+    CONFIG_FILE = '{}/config/wi_sun_config.yml'.format(work_dir)
 
     EPCS = {
         '0xE0': b'\xE0',  # 積算電力量(正)
@@ -271,7 +272,8 @@ def main():
 
     try:
         # TODO: Change to find path be run from anywhere.
-        influx_params = yaml.safe_load(open('./secret/influx.yml'))
+        influx_params = yaml.safe_load(
+                open('{}/secret/influx.yml'.format(work_dir)))
         elcli = SimpleEchonetLiteClient()
         influx_cli = MyInfluxdbClient(influx_params['host'],
                                     influx_params['dbname'])
