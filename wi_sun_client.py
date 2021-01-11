@@ -23,7 +23,6 @@ logging.basicConfig(
     format='[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 # TODO: remove such a sensitive info.
-# TODO: Change to find path be run from anywhere.
 account = yaml.safe_load(open('{}/secret/b_route.yml'.format(work_dir)))
 
 
@@ -34,6 +33,7 @@ class SimpleEchonetLiteClient():
     RETRY_INTERVAL = 10  # sec
     CONF_LIFETIME = 12 * 60 * 60
     MAX_DURATION_SCAN = 7  # Should be < 15, but not work for 8 or large one.
+    MAX_NO_RES = 10
 
     SERIAL_DEV = '/dev/ttyUSB0'
     CONFIG_FILE = '{}/config/wi_sun_config.yml'.format(work_dir)
@@ -63,30 +63,33 @@ class SimpleEchonetLiteClient():
     def __init__(self):
         # Define read timeout for serial dev to avoid to be freezed.
         ser_read_timeout = 10.0  # sec
+        self.count_no_res = 0  # Count no result of data for reset config.
 
         self.serial_dev = serial.Serial(
             self.SERIAL_DEV, baudrate=115200, timeout=ser_read_timeout)
-        self.conf_force_update = False
-        self.conf = self._get_config(self.CONFIG_FILE, self.conf_force_update)
+        self.conf = self._get_config(self.CONFIG_FILE)
 
         if not self.conf:
-            scan_duration = 4
-            self._auth_b_route()
-            self.conf = self._auth_pana(scan_duration)
-            # TODO: Change to find path be run from anywhere.
-            with open(self.CONFIG_FILE, 'w') as cfpath:
-                yaml.dump(self.conf, cfpath)
+            self._create_config()
 
-    def _get_config(self, conf_fpath, force_update=False):
+    def _get_config(self, conf_fpath):
         """Get config from existing file."""
 
         if os.path.exists(conf_fpath):
             age_of_file = time.time() - os.path.getmtime(conf_fpath)
-            if age_of_file < self.CONF_LIFETIME and force_update is False:
-                # TODO: Change to find path be run from anywhere.
+            if age_of_file < self.CONF_LIFETIME:
                 return yaml.safe_load(open(conf_fpath))
             return None
         return None
+
+    def _create_config(self):
+        """Create config file forcibly."""
+
+        scan_duration = 4
+        self._auth_b_route()
+        self.conf = self._auth_pana(scan_duration)
+        with open(self.CONFIG_FILE, 'w') as cfpath:
+            yaml.dump(self.conf, cfpath)
 
     def _auth_b_route(self):
         """Auth with B route account first for accessing the device."""
@@ -256,6 +259,16 @@ class SimpleEchonetLiteClient():
                         hex_power = data[-8:]
                         return hex_power
 
+            else:
+                self.count_no_res += 1
+
+            if self.count_no_res > self.MAX_NO_RES:
+                # TODO: Confirm if resetting config works well when data cannot
+                #       be reteived.
+                # Reset config
+                self._create_config()
+                self.count_no_res = 0
+
             sleep(self.RETRY_INTERVAL)
 
     def close_serial_dev(self):
@@ -271,7 +284,6 @@ def main():
     timeout_each_data = 1  # sec
 
     try:
-        # TODO: Change to find path be run from anywhere.
         influx_params = yaml.safe_load(
                 open('{}/secret/influx.yml'.format(work_dir)))
         elcli = SimpleEchonetLiteClient()
